@@ -62,7 +62,7 @@ func SortNodeSelectors(nodeSelector NodeSelectors) NodeSelectors {
 
 func NewPodWatcher(kubeVerMajor, kubeVerMinor int, schedulerName string, client kubernetes.Interface, fc firmament.FirmamentSchedulerClient) *PodWatcher {
 	glog.Info("Starting PodWatcher...")
-	PodsCond = sync.NewCond(&sync.Mutex{})
+	PodsMux = new(sync.RWMutex)
 	PodToTD = make(map[PodIdentifier]*firmament.TaskDescriptor)
 	TaskIDToPod = make(map[uint64]PodIdentifier)
 	jobIDToJD = make(map[string]*firmament.JobDescriptor)
@@ -252,7 +252,7 @@ func (this *PodWatcher) podWorker() {
 				switch pod.State {
 				case PodPending:
 					glog.V(2).Info("PodPending ", pod.Identifier)
-					PodsCond.L.Lock()
+					PodsMux.Lock()
 					jobId := this.generateJobID(pod.OwnerRef)
 					jd, ok := jobIDToJD[jobId]
 					if !ok {
@@ -268,27 +268,27 @@ func (this *PodWatcher) podWorker() {
 						TaskDescriptor: td,
 						JobDescriptor:  jd,
 					}
-					PodsCond.L.Unlock()
+					PodsMux.Unlock()
 					firmament.TaskSubmitted(this.fc, taskDescription)
 				case PodSucceeded:
 					glog.V(2).Info("PodSucceeded ", pod.Identifier)
-					PodsCond.L.Lock()
+					PodsMux.RLock()
 					td, ok := PodToTD[pod.Identifier]
-					PodsCond.L.Unlock()
+					PodsMux.RUnlock()
 					if !ok {
 						glog.Fatalf("Pod %v does not exist", pod.Identifier)
 					}
 					firmament.TaskCompleted(this.fc, &firmament.TaskUID{TaskUid: td.Uid})
 				case PodDeleted:
 					glog.V(2).Info("PodDeleted ", pod.Identifier)
-					PodsCond.L.Lock()
+					PodsMux.RLock()
 					td, ok := PodToTD[pod.Identifier]
-					PodsCond.L.Unlock()
+					PodsMux.RUnlock()
 					if !ok {
 						glog.Fatalf("Pod %s does not exist", pod.Identifier)
 					}
 					firmament.TaskRemoved(this.fc, &firmament.TaskUID{TaskUid: td.Uid})
-					PodsCond.L.Lock()
+					PodsMux.Lock()
 					delete(PodToTD, pod.Identifier)
 					delete(TaskIDToPod, td.GetUid())
 					// TODO(ionel): Should we delete the task from JD's spawned field?
@@ -299,12 +299,12 @@ func (this *PodWatcher) podWorker() {
 						delete(jobNumTasksToRemove, jobId)
 						delete(jobIDToJD, jobId)
 					}
-					PodsCond.L.Unlock()
+					PodsMux.Unlock()
 				case PodFailed:
 					glog.V(2).Info("PodFailed ", pod.Identifier)
-					PodsCond.L.Lock()
+					PodsMux.RLock()
 					td, ok := PodToTD[pod.Identifier]
-					PodsCond.L.Unlock()
+					PodsMux.RUnlock()
 					if !ok {
 						glog.Fatalf("Pod %s does not exist", pod.Identifier)
 					}
@@ -317,11 +317,11 @@ func (this *PodWatcher) podWorker() {
 					// TODO(ionel): Handle Unknown case.
 				case PodUpdated:
 					glog.V(2).Info("PodUpdated ", pod.Identifier)
-					PodsCond.L.Lock()
+					PodsMux.Lock()
 					jobId := this.generateJobID(pod.OwnerRef)
 					jd, okJob := jobIDToJD[jobId]
 					td, okPod := PodToTD[pod.Identifier]
-					PodsCond.L.Unlock()
+					PodsMux.Unlock()
 					if !okJob {
 						glog.Fatalf("Pod's %v job does not exist", pod.Identifier)
 					}

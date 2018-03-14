@@ -29,7 +29,7 @@ import (
 const bytesToKb = 1024
 
 // Used to guard access to the pod, task and job related maps.
-var PodsCond *sync.Cond
+var PodsMux *sync.RWMutex
 var PodToTD map[PodIdentifier]*firmament.TaskDescriptor
 var TaskIDToPod map[uint64]PodIdentifier
 var jobIDToJD map[string]*firmament.JobDescriptor
