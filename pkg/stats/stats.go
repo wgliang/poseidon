@@ -22,9 +22,9 @@ import (
 	"io"
 	"net"
 
-	"k8s.io/scheduling_poseidon/pkg/firmament"
-	"k8s.io/scheduling_poseidon/pkg/k8sclient"
 	"github.com/golang/glog"
+	"github.com/kubernetes-sigs/poseidon/pkg/firmament"
+	"github.com/kubernetes-sigs/poseidon/pkg/k8sclient"
 	"google.golang.org/grpc"
 )
 
